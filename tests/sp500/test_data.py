@@ -95,3 +95,15 @@ def test_intraday_limits_and_deleted_cache(tmp_path, monkeypatch):
     (tmp_path / "AAPL_1d.parquet").unlink()
     cache.fetch("AAPL", "2024-01-02", "2024-01-06")
     assert len(calls) == 2
+
+
+def test_holiday_only_fetch_is_empty_and_cached(tmp_path, monkeypatch):
+    calls = []
+    def download(*args, **kwargs):
+        calls.append(1)
+        return pd.DataFrame()
+    monkeypatch.setattr("sp500.data.yf.download", download)
+    cache = MarketData(tmp_path)
+    assert cache.fetch("AAPL", "2024-07-04", "2024-07-05").empty
+    assert cache.fetch("AAPL", "2024-07-04", "2024-07-05").empty
+    assert len(calls) == 1

@@ -124,7 +124,8 @@ class MarketData:
             raise ValueError("end must be later than start")
         path = self.cache_dir / f"{ticker}_{interval}.parquet"
         meta = path.with_suffix(".json")
-        frame = pd.read_parquet(path) if path.exists() and not refresh else pd.DataFrame(columns=FEATURES)
+        frame = (pd.read_parquet(path) if path.exists() and not refresh else
+             pd.DataFrame(columns=FEATURES, index=pd.DatetimeIndex([], name="timestamps")))
         ranges = json.loads(meta.read_text()).get("ranges", []) if meta.exists() and path.exists() and not refresh else []
         uncovered = [(start, end)]
         for lower, upper in ranges:
@@ -150,7 +151,7 @@ class MarketData:
             if raw.empty:
                 if len(market_bars(left, right, interval)):
                     raise RuntimeError(f"Yahoo returned no data for {ticker} {left.date()}:{right.date()}; retry later")
-                normalized = pd.DataFrame(columns=FEATURES)
+                normalized = pd.DataFrame(columns=FEATURES, index=pd.DatetimeIndex([], name="timestamps"))
             else:
                 normalized = normalize_candles(raw, interval)
                 if normalized.empty and len(market_bars(left, right, interval)):
@@ -170,6 +171,8 @@ class MarketData:
             temporary = path.with_suffix(".tmp.parquet")
             frame.to_parquet(temporary)
             temporary.replace(path)
+        else:
+            frame.to_parquet(path)
         meta.write_text(json.dumps({"ticker": ticker, "interval": interval, "auto_adjust": True,
                                     "ranges": ranges, "updated_at": now.isoformat()}, indent=2))
         result = frame.loc[(frame.index >= start) & (frame.index < end)].copy()

@@ -1,3 +1,13 @@
+## S&P 500 Stock Tool
+
+This fork includes `python -m sp500`: cached adjusted Yahoo data, NYSE-aware
+single/batch forecasts, sampled uncertainty, resumable universe runs, baseline
+walk-forward evaluation and optional CSV fine-tuning. No API keys required.
+See [the complete guide](docs/SP500_GUIDE.md) and
+[the measured ten-stock evaluation](docs/EVALUATION_DEMO.md).
+The demo did **not** beat simple price baselines; this is a research tool,
+not financial advice.
+
 <div align="center">
   <h2><b>Kronos: A Foundation Model for the Language of Financial Markets </b></h2>
 </div>
