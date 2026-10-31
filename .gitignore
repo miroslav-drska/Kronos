@@ -74,3 +74,9 @@ venv.bak/
 temp/
 tmp/
 .python-version
+
+# S&P 500 generated artifacts
+data/cache/
+data/sp500_finetune/
+outputs/
+.pytest_cache/
