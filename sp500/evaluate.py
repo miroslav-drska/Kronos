@@ -18,6 +18,8 @@ def metrics(actual: np.ndarray, predicted: np.ndarray, origin_close: np.ndarray,
             lower: np.ndarray | None = None, upper: np.ndarray | None = None) -> dict[str, float | int | None]:
     """Score price errors, origin-relative direction and optional sampled-band coverage."""
     actual, predicted, origin_close = map(np.asarray, (actual, predicted, origin_close))
+    if actual.shape != predicted.shape or actual.shape != origin_close.shape:
+        raise ValueError("Metric array shapes must match")
     if actual.size == 0 or np.any(actual <= 0) or not all(np.isfinite(values).all()
                                                         for values in (actual, predicted, origin_close)):
         raise ValueError("Metrics require nonempty finite arrays and positive actual prices")

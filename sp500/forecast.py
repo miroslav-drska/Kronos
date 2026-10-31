@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 import torch
 
-from sp500.data import FEATURES, future_timestamps
+from sp500.data import FEATURES, INTERVALS, future_timestamps
 
 MODELS = {
     "mini": ("NeoQuasar/Kronos-mini", "NeoQuasar/Kronos-Tokenizer-2k", 2048),
@@ -43,6 +43,8 @@ class ForecastConfig:
         """Reject invalid windows before downloading any weights."""
         if self.model not in MODELS:
             raise ValueError(f"Unknown model {self.model!r}")
+        if self.interval not in INTERVALS:
+            raise ValueError(f"Unknown interval {self.interval!r}")
         context = MODELS[self.model][2]
         if not 2 <= self.lookback <= context or not 1 <= self.horizon <= context:
             raise ValueError(f"lookback must be 2..{context}; horizon must be 1..{context}")

@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 import warnings
 
+import numpy as np
 import pandas as pd
 import pandas_market_calendars as mcal
 import requests
@@ -96,7 +97,7 @@ def normalize_candles(raw: pd.DataFrame, interval: str = "1d") -> pd.DataFrame:
         index = index.tz_convert(NY).tz_localize(None)
     frame.index = index.normalize() if interval == "1d" else index
     frame.index.name = "timestamps"
-    frame = frame[~frame.index.duplicated(keep="last")].sort_index().dropna()
+    frame = frame[~frame.index.duplicated(keep="last")].sort_index().replace([np.inf, -np.inf], np.nan).dropna()
     frame = frame[(frame[required[:4]] > 0).all(axis=1) & (frame.volume >= 0)]
     frame["amount"] = (frame.high + frame.low + frame.close) / 3 * frame.volume
     return frame[FEATURES]
@@ -124,7 +125,7 @@ class MarketData:
         path = self.cache_dir / f"{ticker}_{interval}.parquet"
         meta = path.with_suffix(".json")
         frame = pd.read_parquet(path) if path.exists() and not refresh else pd.DataFrame(columns=FEATURES)
-        ranges = json.loads(meta.read_text()).get("ranges", []) if meta.exists() and not refresh else []
+        ranges = json.loads(meta.read_text()).get("ranges", []) if meta.exists() and path.exists() and not refresh else []
         uncovered = [(start, end)]
         for lower, upper in ranges:
             lower, upper = pd.Timestamp(lower), pd.Timestamp(upper)
@@ -152,6 +153,8 @@ class MarketData:
                 normalized = pd.DataFrame(columns=FEATURES)
             else:
                 normalized = normalize_candles(raw, interval)
+                if normalized.empty and len(market_bars(left, right, interval)):
+                    raise RuntimeError(f"Yahoo returned no valid OHLCV bars for {ticker}; cache coverage not updated")
             frame = pd.concat([frame, normalized]) if not frame.empty else normalized
             frame = frame[~frame.index.duplicated(keep="last")].sort_index()
             covered_end = min(right, now.tz_localize(None).normalize())

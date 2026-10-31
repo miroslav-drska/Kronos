@@ -63,3 +63,39 @@ def test_resume_does_not_reload_model(tmp_path, monkeypatch):
     monkeypatch.setattr("sp500.__main__.Forecaster", forbidden)
     run_forecast(build_parser().parse_args(argv + ["--resume", str(tmp_path)]))
     assert len(json.loads((tmp_path / "manifest.json").read_text())["completed"]) == 2
+
+
+def test_interrupted_run_resumes_pending_batches(tmp_path, monkeypatch):
+    monkeypatch.setattr("sp500.__main__.MarketData.fetch", lambda *args, **kwargs: history())
+    real_save = save_forecast
+    calls = []
+    monkeypatch.setattr("sp500.__main__.Forecaster", lambda config: Forecaster(config, Predictor()))
+    def interrupted(output, ticker, *args, **kwargs):
+        calls.append(ticker)
+        if ticker == "MSFT":
+            raise RuntimeError("simulated interruption")
+        real_save(output, ticker, *args, **kwargs)
+    monkeypatch.setattr("sp500.__main__.save_forecast", interrupted)
+    argv = ["forecast", "--tickers", "AAPL", "MSFT", "--lookback", "10", "--samples", "2",
+            "--batch-size", "1", "--device", "cpu", "--output", str(tmp_path)]
+    with pytest.raises(RuntimeError, match="interruption"):
+        run_forecast(build_parser().parse_args(argv))
+    assert set(json.loads((tmp_path / "manifest.json").read_text())["completed"]) == {"AAPL"}
+    calls.clear()
+    monkeypatch.setattr("sp500.__main__.save_forecast", lambda output, ticker, *args, **kwargs:
+                        (calls.append(ticker), real_save(output, ticker, *args, **kwargs)))
+    run_forecast(build_parser().parse_args(argv + ["--resume", str(tmp_path)]))
+    assert calls == ["MSFT"]
+    with pytest.raises(ValueError, match="identical"):
+        run_forecast(build_parser().parse_args(argv + ["--resume", str(tmp_path), "--samples", "3"]))
+
+
+@pytest.mark.slow
+def test_real_yahoo_forecast(tmp_path):
+    from sp500.data import MarketData
+    observed = MarketData(tmp_path / "cache").fetch("AAPL", "2024-01-01", "2025-01-01")
+    config = ForecastConfig(lookback=64, horizon=2, samples=2, device="cpu")
+    output = Forecaster(config).forecast(observed)
+    assert output.shape == (2, 8) and np.isfinite(output.to_numpy()).all()
+    assert output.index.min() == pd.Timestamp("2025-01-02")
+    assert (output.close_p10 <= output.close).all() and (output.close <= output.close_p90).all()

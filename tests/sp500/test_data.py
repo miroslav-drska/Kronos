@@ -52,3 +52,46 @@ def test_failed_download_not_cached(tmp_path, monkeypatch):
     with pytest.raises(RuntimeError, match="no data"):
         MarketData(tmp_path).fetch("AAPL", "2024-01-02", "2024-01-06")
     assert not list(tmp_path.glob("*.json"))
+
+
+def test_timezone_multiindex_and_nonfinite_rows():
+    raw = pd.DataFrame({("Open", "AAPL"): [10, float("inf")], ("High", "AAPL"): [12, 12],
+                        ("Low", "AAPL"): [9, 9], ("Close", "AAPL"): [11, 11],
+                        ("Volume", "AAPL"): [3, 3]},
+                       index=pd.date_range("2024-03-11 13:30", periods=2, freq="h", tz="UTC"))
+    frame = normalize_candles(raw, "1h")
+    assert len(frame) == 1 and frame.index[0] == pd.Timestamp("2024-03-11 09:30")
+
+
+def test_constituent_mapping_cache_and_fetch_date(tmp_path, monkeypatch):
+    from sp500.data import constituents
+    class Response:
+        text = '<table><tr><th>Symbol</th><th>Security</th><th>GICS Sector</th></tr><tr><td>BRK.B</td><td>Berkshire</td><td>Financials</td></tr></table>'
+        def raise_for_status(self):
+            pass
+    calls = []
+    def fetch(*args, **kwargs):
+        calls.append(1)
+        return Response()
+    monkeypatch.setattr("sp500.data.requests.get", fetch)
+    assert constituents(tmp_path).ticker.tolist() == ["BRK-B"]
+    assert "fetched_at" in constituents(tmp_path)
+    assert len(calls) == 1
+    constituents(tmp_path, refresh=True)
+    assert len(calls) == 2
+
+
+def test_intraday_limits_and_deleted_cache(tmp_path, monkeypatch):
+    calls = []
+    def download(*args, start, end, **kwargs):
+        calls.append(1)
+        return pd.DataFrame({"Open": 10, "High": 12, "Low": 9, "Close": 11,
+                             "Volume": 3}, index=market_bars(start, end))
+    monkeypatch.setattr("sp500.data.yf.download", download)
+    cache = MarketData(tmp_path)
+    with pytest.raises(ValueError, match="history must start"):
+        cache.fetch("AAPL", "2000-01-01", "2000-01-05", "1h")
+    cache.fetch("AAPL", "2024-01-02", "2024-01-06")
+    (tmp_path / "AAPL_1d.parquet").unlink()
+    cache.fetch("AAPL", "2024-01-02", "2024-01-06")
+    assert len(calls) == 2
