@@ -141,6 +141,9 @@ class MarketData:
                         remaining.append((upper, right))
             uncovered = remaining
         for left, right in uncovered:
+            if market_bars(left, right, interval).empty:
+                ranges.append([left.isoformat(), right.isoformat()])
+                continue
             if interval != "1d":
                 limit = 7 if interval == "1m" else 730 if interval in ("1h", "60m") else 60
                 if left < now.tz_localize(None).normalize() - pd.Timedelta(days=limit - 1):
@@ -156,7 +159,8 @@ class MarketData:
                 normalized = normalize_candles(raw, interval)
                 if normalized.empty and len(market_bars(left, right, interval)):
                     raise RuntimeError(f"Yahoo returned no valid OHLCV bars for {ticker}; cache coverage not updated")
-            frame = pd.concat([frame, normalized]) if not frame.empty else normalized
+            if not normalized.empty:
+                frame = pd.concat([frame, normalized]) if not frame.empty else normalized
             frame = frame[~frame.index.duplicated(keep="last")].sort_index()
             covered_end = min(right, now.tz_localize(None).normalize())
             if covered_end > left:

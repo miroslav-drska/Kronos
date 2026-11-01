@@ -106,4 +106,21 @@ def test_holiday_only_fetch_is_empty_and_cached(tmp_path, monkeypatch):
     cache = MarketData(tmp_path)
     assert cache.fetch("AAPL", "2024-07-04", "2024-07-05").empty
     assert cache.fetch("AAPL", "2024-07-04", "2024-07-05").empty
-    assert len(calls) == 1
+    assert len(calls) == 0
+
+
+def test_cached_history_with_weekend_gap_skips_yahoo(tmp_path, monkeypatch):
+    calls = []
+    def download(ticker, start, end, **kwargs):
+        stamps = market_bars(start, end)
+        assert not stamps.empty, "Closed-market ranges must not contact Yahoo"
+        calls.append((start, end))
+        return pd.DataFrame({"Open": 10, "High": 12, "Low": 9, "Close": 11,
+                             "Volume": 3}, index=stamps)
+    monkeypatch.setattr("sp500.data.yf.download", download)
+    cache = MarketData(tmp_path)
+    original = cache.fetch("GOOG", "2024-07-05", "2024-07-06")
+    extended = cache.fetch("GOOG", "2024-07-05", "2024-07-08")
+    pd.testing.assert_frame_equal(original, extended)
+    pd.testing.assert_frame_equal(extended, cache.fetch("GOOG", "2024-07-05", "2024-07-08"))
+    assert calls == [("2024-07-05", "2024-07-06")]
